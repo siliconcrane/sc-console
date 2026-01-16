@@ -35,6 +35,44 @@ interface SuccessResponse<T = unknown> {
   data: T;
 }
 
+// Helper function: Compute event hash for deduplication (Issue #6)
+async function computeEventHash(
+  experiment_id: string | null | undefined,
+  event_type: string,
+  session_id: string | null | undefined,
+  event_data: unknown
+): Promise<string> {
+  // Create canonical representation
+  const canonical = {
+    experiment_id: experiment_id || null,
+    event_type,
+    session_id: session_id || null,
+    event_data: event_data || null,
+  };
+
+  // Sort event_data keys if it's an object for determinism
+  if (canonical.event_data && typeof canonical.event_data === 'object') {
+    const sortedData: Record<string, unknown> = {};
+    const keys = Object.keys(canonical.event_data).sort();
+    for (const key of keys) {
+      sortedData[key] = canonical.event_data[key as keyof typeof canonical.event_data];
+    }
+    canonical.event_data = sortedData;
+  }
+
+  // Stringify with sorted keys
+  const canonicalJson = JSON.stringify(canonical);
+
+  // Compute SHA-256 hash
+  const encoder = new TextEncoder();
+  const data = encoder.encode(canonicalJson);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  const hashHex = hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+
+  return hashHex;
+}
+
 const app = new Hono<{ Bindings: Env; Variables: { requestId: string } }>();
 
 // Request ID middleware (Section 4.7)
@@ -152,6 +190,328 @@ app.get('/experiments/by-slug/:slug', async (c) => {
       error: {
         code: 'INTERNAL_ERROR',
         message: 'Failed to retrieve experiment',
+        request_id: requestId,
+      },
+    };
+    return c.json(errorResponse, 500);
+  }
+});
+
+// POST /leads (Section 4.8.2, Issue #5)
+app.post('/leads', async (c) => {
+  const requestId = c.get('requestId');
+
+  try {
+    const body = await c.req.json();
+
+    // Extract fields from request body
+    const {
+      experiment_id,
+      email,
+      name,
+      company,
+      phone,
+      custom_fields,
+      utm_source,
+      utm_medium,
+      utm_campaign,
+      utm_term,
+      utm_content,
+      hp_field, // honeypot field
+    } = body;
+
+    // Validate required fields
+    if (!experiment_id || !email) {
+      const errorResponse: ErrorResponse = {
+        success: false,
+        error: {
+          code: 'INVALID_REQUEST',
+          message: 'Missing required fields: experiment_id and email are required',
+          request_id: requestId,
+        },
+      };
+      return c.json(errorResponse, 400);
+    }
+
+    // 1. Validate experiment exists and status IN ('launch', 'run')
+    const experiment = await c.env.DB.prepare(
+      'SELECT id, slug, status FROM experiments WHERE id = ? AND status IN (?, ?)'
+    )
+      .bind(experiment_id, 'launch', 'run')
+      .first();
+
+    if (!experiment) {
+      const errorResponse: ErrorResponse = {
+        success: false,
+        error: {
+          code: 'EXPERIMENT_NOT_FOUND',
+          message: `Experiment '${experiment_id}' not found or not accepting leads`,
+          request_id: requestId,
+        },
+      };
+      return c.json(errorResponse, 404);
+    }
+
+    // 2. Honeypot detection - if hp_field is non-empty, it's a bot
+    if (hp_field && hp_field.trim() !== '') {
+      console.log('Bot detected via honeypot', {
+        requestId,
+        experiment_id,
+        email,
+        hp_field,
+      });
+
+      // Return 201 with fake lead_id (don't store in DB)
+      const fakeLeadId = Math.floor(Math.random() * 1000000);
+      const successResponse: SuccessResponse = {
+        success: true,
+        data: {
+          lead_id: fakeLeadId,
+          experiment_id,
+          slug: experiment.slug,
+        },
+      };
+      return c.json(successResponse, 201);
+    }
+
+    // 3. Normalize email: lowercase and trim
+    const normalizedEmail = email.toLowerCase().trim();
+
+    // Extract additional tracking data from headers
+    const ipCountry = c.req.header('CF-IPCountry') || null;
+    const userAgent = c.req.header('User-Agent') || null;
+    const referrer = c.req.header('Referer') || null;
+
+    // 4. Try INSERT INTO leads
+    try {
+      const insertResult = await c.env.DB.prepare(
+        `INSERT INTO leads (
+          experiment_id,
+          email,
+          name,
+          company,
+          phone,
+          custom_fields,
+          utm_source,
+          utm_medium,
+          utm_campaign,
+          utm_term,
+          utm_content,
+          referrer,
+          ip_country,
+          user_agent
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+        .bind(
+          experiment_id,
+          normalizedEmail,
+          name || null,
+          company || null,
+          phone || null,
+          custom_fields ? JSON.stringify(custom_fields) : null,
+          utm_source || null,
+          utm_medium || null,
+          utm_campaign || null,
+          utm_term || null,
+          utm_content || null,
+          referrer,
+          ipCountry,
+          userAgent
+        )
+        .run();
+
+      // Get the inserted lead_id
+      const leadId = insertResult.meta.last_row_id;
+
+      // 6. Return 201 with lead_id, experiment_id, slug
+      const successResponse: SuccessResponse = {
+        success: true,
+        data: {
+          lead_id: leadId,
+          experiment_id,
+          slug: experiment.slug,
+        },
+      };
+
+      console.log('Lead created successfully', {
+        requestId,
+        leadId,
+        experiment_id,
+        email: normalizedEmail,
+      });
+
+      return c.json(successResponse, 201);
+    } catch (dbError: unknown) {
+      // 5. Check for UNIQUE constraint violation (duplicate lead)
+      const errorMessage =
+        dbError instanceof Error ? dbError.message : String(dbError);
+
+      if (
+        errorMessage.includes('UNIQUE constraint failed') ||
+        errorMessage.includes('unique constraint')
+      ) {
+        const errorResponse: ErrorResponse = {
+          success: false,
+          error: {
+            code: 'DUPLICATE_LEAD',
+            message: `Lead with email '${normalizedEmail}' already exists for this experiment`,
+            request_id: requestId,
+          },
+        };
+        return c.json(errorResponse, 409);
+      }
+
+      // Re-throw other database errors
+      throw dbError;
+    }
+  } catch (error) {
+    console.error('Lead creation failed', {
+      requestId,
+      error: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+    });
+
+    const errorResponse: ErrorResponse = {
+      success: false,
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to create lead',
+        request_id: requestId,
+      },
+    };
+    return c.json(errorResponse, 500);
+  }
+});
+
+// POST /events (Section 4.8.3, Issue #6)
+app.post('/events', async (c) => {
+  const requestId = c.get('requestId');
+
+  try {
+    const body = await c.req.json();
+
+    // Extract fields from request body
+    const {
+      experiment_id,
+      event_type,
+      event_data,
+      session_id,
+      visitor_id,
+    } = body;
+
+    // Validate required fields
+    if (!event_type) {
+      const errorResponse: ErrorResponse = {
+        success: false,
+        error: {
+          code: 'INVALID_REQUEST',
+          message: 'Missing required field: event_type',
+          request_id: requestId,
+        },
+      };
+      return c.json(errorResponse, 400);
+    }
+
+    // 1. Compute event_hash for deduplication
+    const eventHash = await computeEventHash(
+      experiment_id,
+      event_type,
+      session_id,
+      event_data
+    );
+
+    // Extract tracking data from headers
+    const ipCountry = c.req.header('CF-IPCountry') || null;
+    const userAgent = c.req.header('User-Agent') || null;
+    const referrer = c.req.header('Referer') || null;
+
+    // 2. Check for existing event with same hash in last 5 minutes
+    const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
+    const existingEvent = await c.env.DB.prepare(
+      'SELECT id FROM event_log WHERE event_hash = ? AND created_at > ? LIMIT 1'
+    )
+      .bind(eventHash, fiveMinutesAgo)
+      .first();
+
+    // 3. If exists, return 201 with existing event_id (idempotent)
+    if (existingEvent) {
+      console.log('Duplicate event detected (idempotent)', {
+        requestId,
+        event_id: existingEvent.id,
+        event_hash: eventHash,
+        event_type,
+      });
+
+      const successResponse: SuccessResponse = {
+        success: true,
+        data: {
+          event_id: existingEvent.id,
+          deduplicated: true,
+        },
+      };
+      return c.json(successResponse, 201);
+    }
+
+    // 4. Insert new event
+    const insertResult = await c.env.DB.prepare(
+      `INSERT INTO event_log (
+        experiment_id,
+        event_type,
+        event_data,
+        event_hash,
+        session_id,
+        visitor_id,
+        referrer,
+        user_agent,
+        ip_country
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+      .bind(
+        experiment_id || null,
+        event_type,
+        event_data ? JSON.stringify(event_data) : null,
+        eventHash,
+        session_id || null,
+        visitor_id || null,
+        referrer,
+        userAgent,
+        ipCountry
+      )
+      .run();
+
+    // Get the inserted event_id
+    const eventId = insertResult.meta.last_row_id;
+
+    // Return 201 with new event_id
+    const successResponse: SuccessResponse = {
+      success: true,
+      data: {
+        event_id: eventId,
+        deduplicated: false,
+      },
+    };
+
+    console.log('Event created successfully', {
+      requestId,
+      event_id: eventId,
+      event_type,
+      experiment_id,
+      event_hash: eventHash,
+    });
+
+    return c.json(successResponse, 201);
+  } catch (error) {
+    console.error('Event creation failed', {
+      requestId,
+      error: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+    });
+
+    const errorResponse: ErrorResponse = {
+      success: false,
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to create event',
         request_id: requestId,
       },
     };
