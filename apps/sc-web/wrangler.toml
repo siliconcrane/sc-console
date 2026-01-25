@@ -1,0 +1,9 @@
+name = "sc-web"
+compatibility_date = "2024-01-01"
+pages_build_output_dir = "./dist"
+
+# Environment variables for Cloudflare Pages
+# Note: Set these in the Cloudflare dashboard under Settings > Environment variables
+# PUBLIC_API_URL
+# PUBLIC_GA4_MEASUREMENT_ID
+# PUBLIC_STRIPE_PUBLISHABLE_KEY
