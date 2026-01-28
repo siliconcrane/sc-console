@@ -448,6 +448,7 @@ app.post('/leads', async (c) => {
             },
             body: JSON.stringify({
               from: 'Silicon Crane <noreply@siliconcrane.com>',
+              reply_to: 'launch@siliconcrane.com',
               to: [normalizedEmail],
               subject: `You're on the list for ${experimentName}!`,
               text: `${greeting}
