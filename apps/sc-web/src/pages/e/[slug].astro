@@ -157,7 +157,7 @@ const priceDisplay = hasPricing ? `$${(experiment.price_cents! / 100).toFixed(2)
     </div>
   </main>
 
-  <script define:vars={{ experimentId: experiment.id, slug }}>
+  <script define:vars={{ experimentId: experiment.id, slug, apiUrl: import.meta.env.PUBLIC_API_URL }}>
     // Generate session and visitor IDs
     function getOrCreateId(key, expiryDays) {
       let id = localStorage.getItem(key);
@@ -221,8 +221,7 @@ const priceDisplay = hasPricing ? `$${(experiment.price_cents! / 100).toFixed(2)
       };
 
       try {
-        const API_URL = import.meta.env.PUBLIC_API_URL;
-        const response = await fetch(`${API_URL}/leads`, {
+        const response = await fetch(`${apiUrl}/leads`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

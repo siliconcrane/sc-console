@@ -1,4 +1,5 @@
-const API_URL = import.meta.env.PUBLIC_API_URL;
+// Hardcoded for now - env vars don't work reliably in Cloudflare Pages SSR
+const API_URL = 'https://sc-api.automation-ab6.workers.dev';
 
 export interface ExperimentData {
   id: string;
