@@ -332,7 +332,7 @@ app.post('/leads', async (c) => {
 
     // 1. Validate experiment exists and status IN ('launch', 'run')
     const experiment = await c.env.DB.prepare(
-      'SELECT id, slug, status FROM experiments WHERE id = ? AND status IN (?, ?)'
+      'SELECT id, slug, status, name, copy_pack FROM experiments WHERE id = ? AND status IN (?, ?)'
     )
       .bind(experiment_id, 'launch', 'run')
       .first();
@@ -419,6 +419,71 @@ app.post('/leads', async (c) => {
 
       // Get the inserted lead_id
       const leadId = insertResult.meta.last_row_id;
+
+      // Send confirmation email via Resend
+      if (c.env.RESEND_API_KEY) {
+        try {
+          // Parse copy_pack for experiment-specific messaging
+          let ctaText = 'Get Early Access';
+          let experimentDescription = '';
+          if (experiment.copy_pack) {
+            try {
+              const copyPack = JSON.parse(experiment.copy_pack as string);
+              ctaText = copyPack.cta_primary || ctaText;
+              experimentDescription = copyPack.subheadline || '';
+            } catch {
+              // Ignore parse errors
+            }
+          }
+
+          const experimentName = experiment.name || 'our waitlist';
+          const leadName = name ? name.trim() : '';
+          const greeting = leadName ? `Hi ${leadName},` : 'Hi there,';
+
+          await fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${c.env.RESEND_API_KEY}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              from: 'Silicon Crane <noreply@siliconcrane.com>',
+              to: [normalizedEmail],
+              subject: `You're on the list for ${experimentName}!`,
+              text: `${greeting}
+
+Thanks for signing up for ${experimentName}!${experimentDescription ? ` ${experimentDescription}` : ''}
+
+You're now on the list. We'll keep you updated on our progress and let you know as soon as we're ready to launch.
+
+What happens next:
+- We're working hard to build something great
+- You'll be among the first to know when we launch
+- We may reach out for feedback along the way
+
+If you have any questions, just reply to this email.
+
+Thanks for your interest!
+
+- The Silicon Crane Team
+
+---
+You received this email because you signed up at siliconcrane.com/e/${experiment.slug}
+`,
+            }),
+          });
+
+          console.log('Confirmation email sent', {
+            requestId,
+            leadId,
+            email: normalizedEmail,
+            experiment_id,
+          });
+        } catch (emailError) {
+          // Log but don't fail the request if email fails
+          console.error('Failed to send confirmation email:', emailError);
+        }
+      }
 
       // 6. Return 201 with lead_id, experiment_id, slug
       const successResponse: SuccessResponse = {
