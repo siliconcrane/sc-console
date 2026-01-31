@@ -2011,6 +2011,353 @@ app.post('/payments/webhook', async (c) => {
   }
 });
 
+// ============================================================
+// METRICS ENDPOINTS (Issue #10)
+// Internal endpoint - requires X-SC-Key
+// ============================================================
+
+/**
+ * Compute derived metrics from raw metrics per spec Section 3.6
+ * All derived metrics use Math.round() for consistent integer results
+ *
+ * @param raw - Raw metrics from the request body
+ * @returns Derived metrics (ctr_bp, cvr_bp, cpl_cents, roas_bp)
+ */
+function computeDerivedMetrics(raw: {
+  impressions: number;
+  clicks: number;
+  sessions: number;
+  conversions: number;
+  spend_cents: number;
+  revenue_cents: number;
+}): {
+  ctr_bp: number | null;
+  cvr_bp: number | null;
+  cpl_cents: number | null;
+  roas_bp: number | null;
+} {
+  return {
+    // Click-through rate in basis points: (clicks / impressions) * 10000
+    ctr_bp: raw.impressions > 0 ? Math.round((raw.clicks / raw.impressions) * 10000) : null,
+    // Conversion rate in basis points: (conversions / sessions) * 10000
+    cvr_bp: raw.sessions > 0 ? Math.round((raw.conversions / raw.sessions) * 10000) : null,
+    // Cost per lead in cents: spend_cents / conversions
+    cpl_cents: raw.conversions > 0 ? Math.round(raw.spend_cents / raw.conversions) : null,
+    // Return on ad spend in basis points: (revenue_cents / spend_cents) * 10000
+    roas_bp: raw.spend_cents > 0 ? Math.round((raw.revenue_cents / raw.spend_cents) * 10000) : null,
+  };
+}
+
+// POST /metrics (Section 4.8.8, Issue #10)
+// Internal endpoint - requires X-SC-Key
+app.post('/metrics', async (c) => {
+  const requestId = c.get('requestId');
+
+  try {
+    const body = await c.req.json();
+
+    // Extract fields from request body
+    const {
+      experiment_id,
+      date,
+      source,
+      impressions = 0,
+      clicks = 0,
+      sessions = 0,
+      conversions = 0,
+      spend_cents = 0,
+      revenue_cents = 0,
+    } = body;
+
+    // Validate required fields
+    if (!experiment_id || !date) {
+      const errorResponse: ErrorResponse = {
+        success: false,
+        error: {
+          code: 'INVALID_REQUEST',
+          message: 'Missing required fields: experiment_id and date are required',
+          request_id: requestId,
+        },
+      };
+      return c.json(errorResponse, 400);
+    }
+
+    // Validate date format (YYYY-MM-DD)
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateRegex.test(date)) {
+      const errorResponse: ErrorResponse = {
+        success: false,
+        error: {
+          code: 'INVALID_REQUEST',
+          message: 'Invalid date format. Expected YYYY-MM-DD',
+          details: { field: 'date', value: date },
+          request_id: requestId,
+        },
+      };
+      return c.json(errorResponse, 400);
+    }
+
+    // Validate numeric fields are non-negative integers
+    const numericFields = {
+      impressions,
+      clicks,
+      sessions,
+      conversions,
+      spend_cents,
+      revenue_cents,
+    };
+
+    for (const [field, value] of Object.entries(numericFields)) {
+      if (typeof value !== 'number' || value < 0 || !Number.isInteger(value)) {
+        const errorResponse: ErrorResponse = {
+          success: false,
+          error: {
+            code: 'INVALID_REQUEST',
+            message: `Invalid ${field}: must be a non-negative integer`,
+            details: { field, value },
+            request_id: requestId,
+          },
+        };
+        return c.json(errorResponse, 400);
+      }
+    }
+
+    // 1. Verify experiment exists
+    const experiment = await c.env.DB.prepare('SELECT id FROM experiments WHERE id = ?')
+      .bind(experiment_id)
+      .first();
+
+    if (!experiment) {
+      const errorResponse: ErrorResponse = {
+        success: false,
+        error: {
+          code: 'EXPERIMENT_NOT_FOUND',
+          message: `Experiment '${experiment_id}' not found`,
+          request_id: requestId,
+        },
+      };
+      return c.json(errorResponse, 404);
+    }
+
+    // 2. Compute derived metrics per spec Section 3.6
+    const derived = computeDerivedMetrics({
+      impressions,
+      clicks,
+      sessions,
+      conversions,
+      spend_cents,
+      revenue_cents,
+    });
+
+    // 3. UPSERT: INSERT ON CONFLICT UPDATE
+    // SQLite/D1 syntax for upsert
+    const upsertQuery = `
+      INSERT INTO metrics_daily (
+        experiment_id,
+        date,
+        source,
+        impressions,
+        clicks,
+        sessions,
+        conversions,
+        spend_cents,
+        revenue_cents,
+        ctr_bp,
+        cvr_bp,
+        cpl_cents,
+        roas_bp
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(experiment_id, date, source) DO UPDATE SET
+        impressions = excluded.impressions,
+        clicks = excluded.clicks,
+        sessions = excluded.sessions,
+        conversions = excluded.conversions,
+        spend_cents = excluded.spend_cents,
+        revenue_cents = excluded.revenue_cents,
+        ctr_bp = excluded.ctr_bp,
+        cvr_bp = excluded.cvr_bp,
+        cpl_cents = excluded.cpl_cents,
+        roas_bp = excluded.roas_bp,
+        updated_at = (strftime('%s', 'now') * 1000)
+    `;
+
+    const result = await c.env.DB.prepare(upsertQuery)
+      .bind(
+        experiment_id,
+        date,
+        source || null,
+        impressions,
+        clicks,
+        sessions,
+        conversions,
+        spend_cents,
+        revenue_cents,
+        derived.ctr_bp,
+        derived.cvr_bp,
+        derived.cpl_cents,
+        derived.roas_bp
+      )
+      .run();
+
+    // Get the record ID (either newly inserted or existing)
+    const record = await c.env.DB.prepare(
+      'SELECT id FROM metrics_daily WHERE experiment_id = ? AND date = ? AND (source = ? OR (source IS NULL AND ? IS NULL))'
+    )
+      .bind(experiment_id, date, source || null, source || null)
+      .first();
+
+    // 4. Return response with id and derived metrics
+    const successResponse: SuccessResponse = {
+      success: true,
+      data: {
+        id: record?.id,
+        experiment_id,
+        date,
+        source: source || null,
+        raw: {
+          impressions,
+          clicks,
+          sessions,
+          conversions,
+          spend_cents,
+          revenue_cents,
+        },
+        derived: {
+          ctr_bp: derived.ctr_bp,
+          cvr_bp: derived.cvr_bp,
+          cpl_cents: derived.cpl_cents,
+          roas_bp: derived.roas_bp,
+        },
+      },
+    };
+
+    console.log('Metrics imported successfully', {
+      requestId,
+      id: record?.id,
+      experiment_id,
+      date,
+      source,
+      derived,
+    });
+
+    return c.json(successResponse, 200);
+  } catch (error) {
+    console.error('Metrics import failed', {
+      requestId,
+      error: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+    });
+
+    const errorResponse: ErrorResponse = {
+      success: false,
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to import metrics',
+        request_id: requestId,
+      },
+    };
+    return c.json(errorResponse, 500);
+  }
+});
+
+// GET /metrics (Issue #10)
+// Internal endpoint - requires X-SC-Key
+// List metrics for an experiment
+app.get('/metrics', async (c) => {
+  const requestId = c.get('requestId');
+
+  try {
+    // Parse query parameters
+    const experimentId = c.req.query('experiment_id');
+    const startDate = c.req.query('start_date');
+    const endDate = c.req.query('end_date');
+    const source = c.req.query('source');
+
+    // Validate experiment_id is required
+    if (!experimentId) {
+      const errorResponse: ErrorResponse = {
+        success: false,
+        error: {
+          code: 'INVALID_REQUEST',
+          message: 'Missing required query parameter: experiment_id',
+          request_id: requestId,
+        },
+      };
+      return c.json(errorResponse, 400);
+    }
+
+    // Build query
+    let query = 'SELECT * FROM metrics_daily WHERE experiment_id = ?';
+    const bindings: (string | number)[] = [experimentId];
+
+    if (startDate) {
+      query += ' AND date >= ?';
+      bindings.push(startDate);
+    }
+
+    if (endDate) {
+      query += ' AND date <= ?';
+      bindings.push(endDate);
+    }
+
+    if (source) {
+      query += ' AND source = ?';
+      bindings.push(source);
+    }
+
+    query += ' ORDER BY date ASC';
+
+    // Execute query
+    const result = await c.env.DB.prepare(query).bind(...bindings).all();
+    const metrics = result.results || [];
+
+    // Calculate totals
+    const totals = metrics.reduce(
+      (acc, m) => ({
+        impressions: acc.impressions + (m.impressions as number || 0),
+        clicks: acc.clicks + (m.clicks as number || 0),
+        sessions: acc.sessions + (m.sessions as number || 0),
+        conversions: acc.conversions + (m.conversions as number || 0),
+        spend_cents: acc.spend_cents + (m.spend_cents as number || 0),
+        revenue_cents: acc.revenue_cents + (m.revenue_cents as number || 0),
+      }),
+      { impressions: 0, clicks: 0, sessions: 0, conversions: 0, spend_cents: 0, revenue_cents: 0 }
+    );
+
+    // Compute derived totals
+    const derivedTotals = computeDerivedMetrics(totals);
+
+    const successResponse: SuccessResponse = {
+      success: true,
+      data: {
+        items: metrics,
+        totals: {
+          ...totals,
+          ...derivedTotals,
+        },
+        count: metrics.length,
+      },
+    };
+
+    return c.json(successResponse, 200);
+  } catch (error) {
+    console.error('List metrics failed', {
+      requestId,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+
+    const errorResponse: ErrorResponse = {
+      success: false,
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to list metrics',
+        request_id: requestId,
+      },
+    };
+    return c.json(errorResponse, 500);
+  }
+});
+
 // 404 handler
 app.notFound((c) => {
   const errorResponse: ErrorResponse = {

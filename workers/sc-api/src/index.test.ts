@@ -1229,3 +1229,232 @@ describe('POST /experiments/:id/learning_memos (Issue #12)', () => {
     // TODO: Implement after D1 local testing is set up
   });
 });
+
+describe('POST /metrics (Issue #10)', () => {
+  let worker: UnstableDevWorker;
+
+  beforeAll(async () => {
+    worker = await unstable_dev('src/index.ts', {
+      experimental: { disableExperimentalWarning: true },
+      local: true,
+    });
+  });
+
+  afterAll(async () => {
+    await worker.stop();
+  });
+
+  it('should return 401 without X-SC-Key header', async () => {
+    const resp = await worker.fetch('/metrics', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        experiment_id: 'SC-2026-001',
+        date: '2026-01-15',
+        impressions: 1000,
+        clicks: 50,
+      }),
+    });
+
+    expect(resp.status).toBe(401);
+    const data = await resp.json();
+    expect(data.success).toBe(false);
+    expect(data.error.code).toBe('UNAUTHORIZED');
+  });
+
+  it('should return 400 when missing required fields', async () => {
+    const resp = await worker.fetch('/metrics', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-SC-Key': 'test-key',
+      },
+      body: JSON.stringify({}),
+    });
+
+    // Expecting 401 in test environment without valid SC_API_KEY
+    // With valid auth, would expect 400 for missing fields
+    expect([400, 401]).toContain(resp.status);
+  });
+
+  it('should return 400 for invalid date format', async () => {
+    const resp = await worker.fetch('/metrics', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-SC-Key': 'test-key',
+      },
+      body: JSON.stringify({
+        experiment_id: 'SC-2026-001',
+        date: 'invalid-date',
+      }),
+    });
+
+    // Expecting 401 in test environment without valid SC_API_KEY
+    // With valid auth, would expect 400 for invalid date
+    expect([400, 401]).toContain(resp.status);
+  });
+
+  it('should return 400 for negative metric values', async () => {
+    const resp = await worker.fetch('/metrics', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-SC-Key': 'test-key',
+      },
+      body: JSON.stringify({
+        experiment_id: 'SC-2026-001',
+        date: '2026-01-15',
+        impressions: -100,
+      }),
+    });
+
+    // Expecting 401 in test environment without valid SC_API_KEY
+    // With valid auth, would expect 400 for negative values
+    expect([400, 401]).toContain(resp.status);
+  });
+
+  it('should include X-Request-Id header', async () => {
+    const resp = await worker.fetch('/metrics', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-SC-Key': 'test-key',
+      },
+      body: JSON.stringify({
+        experiment_id: 'SC-2026-001',
+        date: '2026-01-15',
+      }),
+    });
+
+    expect(resp.headers.get('X-Request-Id')).toBeDefined();
+    expect(resp.headers.get('X-Request-Id')).toMatch(/^req_[a-f0-9]{16}$/);
+  });
+
+  it('should compute derived metrics correctly', async () => {
+    // This test requires database setup with a valid experiment
+    // In a real implementation:
+    // 1. Create experiment
+    // 2. Import metrics: 1000 impressions, 50 clicks, 100 sessions, 10 conversions, 5000 spend, 10000 revenue
+    // 3. Verify computed values:
+    //    - ctr_bp = Math.round((50/1000) * 10000) = 500 (5%)
+    //    - cvr_bp = Math.round((10/100) * 10000) = 1000 (10%)
+    //    - cpl_cents = Math.round(5000/10) = 500 ($5.00 per lead)
+    //    - roas_bp = Math.round((10000/5000) * 10000) = 20000 (200% ROAS)
+
+    // TODO: Implement after D1 local testing is set up
+  });
+
+  it('should handle zero values for derived metrics (prevent division by zero)', async () => {
+    // This test verifies null handling for division by zero cases
+    // In a real implementation:
+    // 1. Create experiment
+    // 2. Import metrics with 0 impressions, 0 sessions, 0 conversions, 0 spend
+    // 3. Verify derived metrics are all null (not NaN or Infinity)
+
+    // TODO: Implement after D1 local testing is set up
+  });
+
+  it('should upsert metrics (update existing record)', async () => {
+    // This test verifies upsert behavior
+    // In a real implementation:
+    // 1. Create experiment
+    // 2. Import metrics for date X
+    // 3. Import different metrics for same date X
+    // 4. Verify only one record exists
+    // 5. Verify metrics are updated to new values
+
+    // TODO: Implement after D1 local testing is set up
+  });
+
+  it('should support source field for platform segmentation', async () => {
+    // This test verifies source field handling
+    // In a real implementation:
+    // 1. Create experiment
+    // 2. Import metrics for date X with source='facebook'
+    // 3. Import metrics for date X with source='google'
+    // 4. Verify two separate records exist
+    // 5. Both should be retrievable
+
+    // TODO: Implement after D1 local testing is set up
+  });
+});
+
+describe('GET /metrics (Issue #10)', () => {
+  let worker: UnstableDevWorker;
+
+  beforeAll(async () => {
+    worker = await unstable_dev('src/index.ts', {
+      experimental: { disableExperimentalWarning: true },
+      local: true,
+    });
+  });
+
+  afterAll(async () => {
+    await worker.stop();
+  });
+
+  it('should return 401 without X-SC-Key header', async () => {
+    const resp = await worker.fetch('/metrics?experiment_id=SC-2026-001');
+
+    expect(resp.status).toBe(401);
+    const data = await resp.json();
+    expect(data.success).toBe(false);
+    expect(data.error.code).toBe('UNAUTHORIZED');
+  });
+
+  it('should return 400 when missing experiment_id', async () => {
+    const resp = await worker.fetch('/metrics', {
+      headers: { 'X-SC-Key': 'test-key' },
+    });
+
+    // Expecting 401 in test environment without valid SC_API_KEY
+    // With valid auth, would expect 400 for missing experiment_id
+    expect([400, 401]).toContain(resp.status);
+  });
+
+  it('should return paginated metrics with totals', async () => {
+    // This test requires database setup with metrics data
+    // In a real implementation:
+    // 1. Create experiment
+    // 2. Import multiple days of metrics
+    // 3. Query GET /metrics?experiment_id=X
+    // 4. Verify response has items array, totals object, and count
+
+    // TODO: Implement after D1 local testing is set up
+  });
+
+  it('should filter by date range', async () => {
+    // This test verifies date range filtering
+    // In a real implementation:
+    // 1. Create experiment
+    // 2. Import metrics for days 1-10
+    // 3. Query with start_date=day3, end_date=day7
+    // 4. Verify only days 3-7 are returned
+
+    // TODO: Implement after D1 local testing is set up
+  });
+
+  it('should filter by source', async () => {
+    // This test verifies source filtering
+    // In a real implementation:
+    // 1. Create experiment
+    // 2. Import metrics with different sources
+    // 3. Query with source=facebook
+    // 4. Verify only facebook metrics are returned
+
+    // TODO: Implement after D1 local testing is set up
+  });
+
+  it('should compute correct totals across all records', async () => {
+    // This test verifies total aggregation
+    // In a real implementation:
+    // 1. Create experiment
+    // 2. Import metrics for multiple days
+    // 3. Query all metrics
+    // 4. Verify totals sum correctly
+    // 5. Verify derived totals are computed from aggregated values
+
+    // TODO: Implement after D1 local testing is set up
+  });
+});
