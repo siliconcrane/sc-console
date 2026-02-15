@@ -16,6 +16,7 @@ SC Console is the development hub for Silicon Crane (SC). It contains:
 ## Session Start
 
 Always run `/sod` at the start of every session to:
+
 - Create session in Context Worker
 - Download current documentation
 - Establish session context for handoffs
@@ -23,6 +24,7 @@ Always run `/sod` at the start of every session to:
 ## Build Commands
 
 ### Frontend (sc-web)
+
 ```bash
 cd apps/sc-web
 npm install             # Install dependencies
@@ -32,6 +34,7 @@ npm run preview         # Preview production build
 ```
 
 ### Workers
+
 ```bash
 cd workers/sc-api       # or sc-maintenance
 npm install             # Install dependencies
@@ -42,12 +45,12 @@ npx tsc --noEmit        # TypeScript validation
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|------------|
-| Frontend | Astro 5, Tailwind CSS |
-| Hosting | Cloudflare (via Astro adapter) |
-| Backend | Cloudflare Workers (Hono) |
-| Database | Cloudflare D1 |
+| Layer    | Technology                     |
+| -------- | ------------------------------ |
+| Frontend | Astro 5, Tailwind CSS          |
+| Hosting  | Cloudflare (via Astro adapter) |
+| Backend  | Cloudflare Workers (Hono)      |
+| Database | Cloudflare D1                  |
 
 ## Key Files
 

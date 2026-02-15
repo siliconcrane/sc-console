@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { unstable_dev, UnstableDevWorker } from 'wrangler';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest'
+import { unstable_dev, UnstableDevWorker } from 'wrangler'
 
 /**
  * Consolidated Tests for SC API
@@ -13,56 +13,56 @@ import { unstable_dev, UnstableDevWorker } from 'wrangler';
  */
 
 describe('Health check endpoint', () => {
-  let worker: UnstableDevWorker;
+  let worker: UnstableDevWorker
 
   beforeAll(async () => {
     worker = await unstable_dev('src/index.ts', {
       experimental: { disableExperimentalWarning: true },
       local: true,
-    });
-  });
+    })
+  })
 
   afterAll(async () => {
-    await worker.stop();
-  });
+    await worker.stop()
+  })
 
   it('should return 200 with health status', async () => {
-    const resp = await worker.fetch('/health');
-    expect(resp.status).toBe(200);
+    const resp = await worker.fetch('/health')
+    expect(resp.status).toBe(200)
 
-    const data = await resp.json();
-    expect(data.status).toBe('ok');
-    expect(data.timestamp).toBeDefined();
-  });
-});
+    const data = await resp.json()
+    expect(data.status).toBe('ok')
+    expect(data.timestamp).toBeDefined()
+  })
+})
 
 describe('POST /leads (Issue #5)', () => {
-  let worker: UnstableDevWorker;
+  let worker: UnstableDevWorker
 
   beforeAll(async () => {
     worker = await unstable_dev('src/index.ts', {
       experimental: { disableExperimentalWarning: true },
       local: true,
-    });
-  });
+    })
+  })
 
   afterAll(async () => {
-    await worker.stop();
-  });
+    await worker.stop()
+  })
 
   it('should return 400 when missing required fields', async () => {
     const resp = await worker.fetch('/leads', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({}),
-    });
+    })
 
-    expect(resp.status).toBe(400);
-    const data = await resp.json();
-    expect(data.success).toBe(false);
-    expect(data.error.code).toBe('INVALID_REQUEST');
-    expect(data.error.request_id).toBeDefined();
-  });
+    expect(resp.status).toBe(400)
+    const data = await resp.json()
+    expect(data.success).toBe(false)
+    expect(data.error.code).toBe('INVALID_REQUEST')
+    expect(data.error.request_id).toBeDefined()
+  })
 
   it('should return 404 for non-existent experiment', async () => {
     const resp = await worker.fetch('/leads', {
@@ -72,13 +72,13 @@ describe('POST /leads (Issue #5)', () => {
         experiment_id: 'SC-2026-999',
         email: 'test@example.com',
       }),
-    });
+    })
 
-    expect(resp.status).toBe(404);
-    const data = await resp.json();
-    expect(data.success).toBe(false);
-    expect(data.error.code).toBe('EXPERIMENT_NOT_FOUND');
-  });
+    expect(resp.status).toBe(404)
+    const data = await resp.json()
+    expect(data.success).toBe(false)
+    expect(data.error.code).toBe('EXPERIMENT_NOT_FOUND')
+  })
 
   it('should return 201 with fake lead_id when hp_field is present (bot detection)', async () => {
     const resp = await worker.fetch('/leads', {
@@ -89,19 +89,19 @@ describe('POST /leads (Issue #5)', () => {
         email: 'bot@example.com',
         hp_field: 'bot-value', // honeypot field
       }),
-    });
+    })
 
     // Bots get validated against experiment first, so this might return 404
     // In production with real data, it would return 201 with fake lead_id
-    expect([201, 404]).toContain(resp.status);
-    const data = await resp.json();
+    expect([201, 404]).toContain(resp.status)
+    const data = await resp.json()
 
     if (resp.status === 201) {
-      expect(data.success).toBe(true);
-      expect(data.data.lead_id).toBeDefined();
-      expect(data.data.experiment_id).toBe('SC-2026-001');
+      expect(data.success).toBe(true)
+      expect(data.data.lead_id).toBeDefined()
+      expect(data.data.experiment_id).toBe('SC-2026-001')
     }
-  });
+  })
 
   it('should include X-Request-Id header in response', async () => {
     const resp = await worker.fetch('/leads', {
@@ -111,11 +111,11 @@ describe('POST /leads (Issue #5)', () => {
         experiment_id: 'SC-2026-001',
         email: 'test@example.com',
       }),
-    });
+    })
 
-    expect(resp.headers.get('X-Request-Id')).toBeDefined();
-    expect(resp.headers.get('X-Request-Id')).toMatch(/^req_[a-f0-9]{16}$/);
-  });
+    expect(resp.headers.get('X-Request-Id')).toBeDefined()
+    expect(resp.headers.get('X-Request-Id')).toMatch(/^req_[a-f0-9]{16}$/)
+  })
 
   it('should create lead with normalized email (lowercase, trimmed)', async () => {
     // This test requires database setup with a test experiment
@@ -125,53 +125,52 @@ describe('POST /leads (Issue #5)', () => {
     // 3. Query the database to verify email is stored as "test@example.com"
     // 4. Submit the same email again with different case
     // 5. Verify it returns 409 DUPLICATE_LEAD
-
     // TODO: Implement after D1 local testing is set up
-  });
+  })
 
   it('should return 409 when submitting duplicate lead (same email + experiment)', async () => {
     // This test requires database setup with test data
     // TODO: Implement after D1 local testing is set up
-  });
+  })
 
   it('should extract tracking data from headers (CF-IPCountry, User-Agent, Referer)', async () => {
     // This test verifies that tracking data is extracted from headers
     // TODO: Implement after D1 local testing is set up
-  });
+  })
 
   it('should handle optional fields (name, company, phone, custom_fields, UTM params)', async () => {
     // This test verifies that optional fields are stored correctly
     // TODO: Implement after D1 local testing is set up
-  });
-});
+  })
+})
 
 describe('POST /events (Issue #6)', () => {
-  let worker: UnstableDevWorker;
+  let worker: UnstableDevWorker
 
   beforeAll(async () => {
     worker = await unstable_dev('src/index.ts', {
       experimental: { disableExperimentalWarning: true },
       local: true,
-    });
-  });
+    })
+  })
 
   afterAll(async () => {
-    await worker.stop();
-  });
+    await worker.stop()
+  })
 
   it('should return 400 when missing required field (event_type)', async () => {
     const resp = await worker.fetch('/events', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({}),
-    });
+    })
 
-    expect(resp.status).toBe(400);
-    const data = await resp.json();
-    expect(data.success).toBe(false);
-    expect(data.error.code).toBe('INVALID_REQUEST');
-    expect(data.error.request_id).toBeDefined();
-  });
+    expect(resp.status).toBe(400)
+    const data = await resp.json()
+    expect(data.success).toBe(false)
+    expect(data.error.code).toBe('INVALID_REQUEST')
+    expect(data.error.request_id).toBeDefined()
+  })
 
   it('should return 201 with event_id when creating new event', async () => {
     const eventData = {
@@ -183,21 +182,21 @@ describe('POST /events (Issue #6)', () => {
         page: '/landing',
         duration: 5000,
       },
-    };
+    }
 
     const resp = await worker.fetch('/events', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(eventData),
-    });
+    })
 
-    expect(resp.status).toBe(201);
-    const data = await resp.json();
-    expect(data.success).toBe(true);
-    expect(data.data.event_id).toBeDefined();
+    expect(resp.status).toBe(201)
+    const data = await resp.json()
+    expect(data.success).toBe(true)
+    expect(data.data.event_id).toBeDefined()
     // deduplicated can be true or false depending on database state
-    expect(typeof data.data.deduplicated).toBe('boolean');
-  });
+    expect(typeof data.data.deduplicated).toBe('boolean')
+  })
 
   it('should return same event_id for duplicate event within 5 minutes (idempotent)', async () => {
     // This test would require database setup to verify idempotency
@@ -206,9 +205,8 @@ describe('POST /events (Issue #6)', () => {
     // 2. Submit the exact same event again within 5 minutes
     // 3. Verify both responses have the same event_id
     // 4. Verify deduplicated flag is true for second response
-
     // TODO: Implement after D1 local testing is set up
-  });
+  })
 
   it('should handle events without experiment_id', async () => {
     const eventData = {
@@ -218,37 +216,37 @@ describe('POST /events (Issue #6)', () => {
         action: 'click',
         target: 'button',
       },
-    };
+    }
 
     const resp = await worker.fetch('/events', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(eventData),
-    });
+    })
 
-    expect(resp.status).toBe(201);
-    const data = await resp.json();
-    expect(data.success).toBe(true);
-    expect(data.data.event_id).toBeDefined();
-  });
+    expect(resp.status).toBe(201)
+    const data = await resp.json()
+    expect(data.success).toBe(true)
+    expect(data.data.event_id).toBeDefined()
+  })
 
   it('should handle events without event_data', async () => {
     const eventData = {
       event_type: 'simple_event',
       session_id: 'sess_abc',
-    };
+    }
 
     const resp = await worker.fetch('/events', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(eventData),
-    });
+    })
 
-    expect(resp.status).toBe(201);
-    const data = await resp.json();
-    expect(data.success).toBe(true);
-    expect(data.data.event_id).toBeDefined();
-  });
+    expect(resp.status).toBe(201)
+    const data = await resp.json()
+    expect(data.success).toBe(true)
+    expect(data.data.event_id).toBeDefined()
+  })
 
   it('should include X-Request-Id header in response', async () => {
     const resp = await worker.fetch('/events', {
@@ -257,52 +255,50 @@ describe('POST /events (Issue #6)', () => {
       body: JSON.stringify({
         event_type: 'test_event',
       }),
-    });
+    })
 
-    expect(resp.headers.get('X-Request-Id')).toBeDefined();
-    expect(resp.headers.get('X-Request-Id')).toMatch(/^req_[a-f0-9]{16}$/);
-  });
+    expect(resp.headers.get('X-Request-Id')).toBeDefined()
+    expect(resp.headers.get('X-Request-Id')).toMatch(/^req_[a-f0-9]{16}$/)
+  })
 
   it('should extract tracking data from headers', async () => {
     // This test verifies that CF-IPCountry, User-Agent, and Referer are extracted
     // In a real implementation, we would:
     // 1. Submit event with specific headers
     // 2. Query the database to verify headers were stored correctly
-
     // TODO: Implement after D1 local testing is set up
-  });
+  })
 
   it('should compute consistent event_hash for identical events', async () => {
     // This test verifies that event hashing is deterministic
     // Same event data should produce same hash
     // Different order of keys in event_data should produce same hash
-
     // TODO: Implement after D1 local testing is set up
-  });
-});
+  })
+})
 
 describe('GET /experiments (Issue #7)', () => {
-  let worker: UnstableDevWorker;
+  let worker: UnstableDevWorker
 
   beforeAll(async () => {
     worker = await unstable_dev('src/index.ts', {
       experimental: { disableExperimentalWarning: true },
       local: true,
-    });
-  });
+    })
+  })
 
   afterAll(async () => {
-    await worker.stop();
-  });
+    await worker.stop()
+  })
 
   it('should return 401 without X-SC-Key header', async () => {
-    const resp = await worker.fetch('/experiments');
-    expect(resp.status).toBe(401);
+    const resp = await worker.fetch('/experiments')
+    expect(resp.status).toBe(401)
 
-    const data = await resp.json();
-    expect(data.success).toBe(false);
-    expect(data.error.code).toBe('UNAUTHORIZED');
-  });
+    const data = await resp.json()
+    expect(data.success).toBe(false)
+    expect(data.error.code).toBe('UNAUTHORIZED')
+  })
 
   it('should return 200 with paginated list when authenticated', async () => {
     // Note: This test requires valid SC_API_KEY environment variable
@@ -311,11 +307,11 @@ describe('GET /experiments (Issue #7)', () => {
 
     const resp = await worker.fetch('/experiments', {
       headers: { 'X-SC-Key': 'test-key' },
-    });
+    })
 
     // Expecting 401 in test environment without valid SC_API_KEY
-    expect([200, 401]).toContain(resp.status);
-  });
+    expect([200, 401]).toContain(resp.status)
+  })
 
   it('should validate limit parameter when authenticated', async () => {
     // Note: This test requires valid SC_API_KEY environment variable
@@ -323,46 +319,46 @@ describe('GET /experiments (Issue #7)', () => {
 
     const resp = await worker.fetch('/experiments?limit=invalid', {
       headers: { 'X-SC-Key': 'test-key' },
-    });
+    })
 
     // Expecting 401 in test environment without valid SC_API_KEY
     // With valid auth, would expect 400 for invalid limit
-    expect([400, 401]).toContain(resp.status);
-  });
+    expect([400, 401]).toContain(resp.status)
+  })
 
   it('should include X-Request-Id header', async () => {
     const resp = await worker.fetch('/experiments', {
       headers: { 'X-SC-Key': 'test-key' },
-    });
+    })
 
-    expect(resp.headers.get('X-Request-Id')).toBeDefined();
-    expect(resp.headers.get('X-Request-Id')).toMatch(/^req_[a-f0-9]{16}$/);
-  });
-});
+    expect(resp.headers.get('X-Request-Id')).toBeDefined()
+    expect(resp.headers.get('X-Request-Id')).toMatch(/^req_[a-f0-9]{16}$/)
+  })
+})
 
 describe('GET /experiments/by-slug/:slug (Issue #4)', () => {
-  let worker: UnstableDevWorker;
+  let worker: UnstableDevWorker
 
   beforeAll(async () => {
     worker = await unstable_dev('src/index.ts', {
       experimental: { disableExperimentalWarning: true },
       local: true,
-    });
-  });
+    })
+  })
 
   afterAll(async () => {
-    await worker.stop();
-  });
+    await worker.stop()
+  })
 
   it('should return 404 for non-existent experiment slug', async () => {
-    const resp = await worker.fetch('/experiments/by-slug/non-existent-slug');
-    expect(resp.status).toBe(404);
+    const resp = await worker.fetch('/experiments/by-slug/non-existent-slug')
+    expect(resp.status).toBe(404)
 
-    const data = await resp.json();
-    expect(data.success).toBe(false);
-    expect(data.error.code).toBe('EXPERIMENT_NOT_FOUND');
-    expect(data.error.request_id).toBeDefined();
-  });
+    const data = await resp.json()
+    expect(data.success).toBe(false)
+    expect(data.error.code).toBe('EXPERIMENT_NOT_FOUND')
+    expect(data.error.request_id).toBeDefined()
+  })
 
   it('should return 200 with sanitized experiment data for valid slug in launch status', async () => {
     // This test requires database setup with test data
@@ -370,10 +366,9 @@ describe('GET /experiments/by-slug/:slug (Issue #4)', () => {
     // 1. Insert a test experiment with status='launch'
     // 2. Query it via the API
     // 3. Verify the response contains only public fields
-
     // For now, we'll skip this test and mark it as todo
     // TODO: Implement after D1 local testing is set up
-  });
+  })
 
   it('should not return experiments in draft status', async () => {
     // This test requires database setup with test data
@@ -381,50 +376,49 @@ describe('GET /experiments/by-slug/:slug (Issue #4)', () => {
     // 1. Insert a test experiment with status='draft'
     // 2. Query it via the API
     // 3. Verify it returns 404
-
     // TODO: Implement after D1 local testing is set up
-  });
+  })
 
   it('should include price_cents and stripe_price_id for priced experiments', async () => {
     // This test verifies that pricing fields are included when present
     // TODO: Implement after D1 local testing is set up
-  });
+  })
 
   it('should not include internal fields in response', async () => {
     // This test verifies sanitization of internal fields
     // Fields to exclude: kill_criteria, max_spend_cents, etc.
     // TODO: Implement after D1 local testing is set up
-  });
+  })
 
   it('should include X-Request-Id header in response', async () => {
-    const resp = await worker.fetch('/experiments/by-slug/test-slug');
-    expect(resp.headers.get('X-Request-Id')).toBeDefined();
-    expect(resp.headers.get('X-Request-Id')).toMatch(/^req_[a-f0-9]{16}$/);
-  });
-});
+    const resp = await worker.fetch('/experiments/by-slug/test-slug')
+    expect(resp.headers.get('X-Request-Id')).toBeDefined()
+    expect(resp.headers.get('X-Request-Id')).toMatch(/^req_[a-f0-9]{16}$/)
+  })
+})
 
 describe('GET /experiments/:id (Issue #7)', () => {
-  let worker: UnstableDevWorker;
+  let worker: UnstableDevWorker
 
   beforeAll(async () => {
     worker = await unstable_dev('src/index.ts', {
       experimental: { disableExperimentalWarning: true },
       local: true,
-    });
-  });
+    })
+  })
 
   afterAll(async () => {
-    await worker.stop();
-  });
+    await worker.stop()
+  })
 
   it('should return 401 without X-SC-Key header', async () => {
-    const resp = await worker.fetch('/experiments/SC-2026-001');
-    expect(resp.status).toBe(401);
+    const resp = await worker.fetch('/experiments/SC-2026-001')
+    expect(resp.status).toBe(401)
 
-    const data = await resp.json();
-    expect(data.success).toBe(false);
-    expect(data.error.code).toBe('UNAUTHORIZED');
-  });
+    const data = await resp.json()
+    expect(data.success).toBe(false)
+    expect(data.error.code).toBe('UNAUTHORIZED')
+  })
 
   it('should return 404 for non-existent experiment when authenticated', async () => {
     // Note: This test requires valid SC_API_KEY environment variable
@@ -432,27 +426,27 @@ describe('GET /experiments/:id (Issue #7)', () => {
 
     const resp = await worker.fetch('/experiments/SC-2026-999', {
       headers: { 'X-SC-Key': 'test-key' },
-    });
+    })
 
     // Expecting 401 in test environment without valid SC_API_KEY
     // With valid auth, would expect 404 for non-existent experiment
-    expect([404, 401]).toContain(resp.status);
-  });
-});
+    expect([404, 401]).toContain(resp.status)
+  })
+})
 
 describe('POST /experiments (Issue #7)', () => {
-  let worker: UnstableDevWorker;
+  let worker: UnstableDevWorker
 
   beforeAll(async () => {
     worker = await unstable_dev('src/index.ts', {
       experimental: { disableExperimentalWarning: true },
       local: true,
-    });
-  });
+    })
+  })
 
   afterAll(async () => {
-    await worker.stop();
-  });
+    await worker.stop()
+  })
 
   it('should return 401 without X-SC-Key header', async () => {
     const resp = await worker.fetch('/experiments', {
@@ -463,13 +457,13 @@ describe('POST /experiments (Issue #7)', () => {
         slug: 'test-experiment',
         archetype: 'waitlist',
       }),
-    });
+    })
 
-    expect(resp.status).toBe(401);
-    const data = await resp.json();
-    expect(data.success).toBe(false);
-    expect(data.error.code).toBe('UNAUTHORIZED');
-  });
+    expect(resp.status).toBe(401)
+    const data = await resp.json()
+    expect(data.success).toBe(false)
+    expect(data.error.code).toBe('UNAUTHORIZED')
+  })
 
   it('should return 400 for missing required fields when authenticated', async () => {
     // Note: This test requires valid SC_API_KEY environment variable
@@ -482,12 +476,12 @@ describe('POST /experiments (Issue #7)', () => {
         'X-SC-Key': 'test-key',
       },
       body: JSON.stringify({}),
-    });
+    })
 
     // Expecting 401 in test environment without valid SC_API_KEY
     // With valid auth, would expect 400 for missing fields
-    expect([400, 401]).toContain(resp.status);
-  });
+    expect([400, 401]).toContain(resp.status)
+  })
 
   it('should return 400 for invalid archetype when authenticated', async () => {
     // Note: This test requires valid SC_API_KEY environment variable
@@ -504,12 +498,12 @@ describe('POST /experiments (Issue #7)', () => {
         slug: 'test-experiment',
         archetype: 'invalid_archetype',
       }),
-    });
+    })
 
     // Expecting 401 in test environment without valid SC_API_KEY
     // With valid auth, would expect 400 for invalid archetype
-    expect([400, 401]).toContain(resp.status);
-  });
+    expect([400, 401]).toContain(resp.status)
+  })
 
   it('should create experiment with generated ID format SC-{year}-{sequence}', async () => {
     // This test requires database setup
@@ -518,37 +512,36 @@ describe('POST /experiments (Issue #7)', () => {
     // 2. Verify response has 201 status
     // 3. Verify ID matches format SC-2026-001, SC-2026-002, etc.
     // 4. Verify default status is 'draft'
-
     // TODO: Implement after D1 local testing is set up
-  });
-});
+  })
+})
 
 describe('PATCH /experiments/:id (Issue #7)', () => {
-  let worker: UnstableDevWorker;
+  let worker: UnstableDevWorker
 
   beforeAll(async () => {
     worker = await unstable_dev('src/index.ts', {
       experimental: { disableExperimentalWarning: true },
       local: true,
-    });
-  });
+    })
+  })
 
   afterAll(async () => {
-    await worker.stop();
-  });
+    await worker.stop()
+  })
 
   it('should return 401 without X-SC-Key header', async () => {
     const resp = await worker.fetch('/experiments/SC-2026-001', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: 'Updated Name' }),
-    });
+    })
 
-    expect(resp.status).toBe(401);
-    const data = await resp.json();
-    expect(data.success).toBe(false);
-    expect(data.error.code).toBe('UNAUTHORIZED');
-  });
+    expect(resp.status).toBe(401)
+    const data = await resp.json()
+    expect(data.success).toBe(false)
+    expect(data.error.code).toBe('UNAUTHORIZED')
+  })
 
   it('should return 404 for non-existent experiment when authenticated', async () => {
     // Note: This test requires valid SC_API_KEY environment variable
@@ -561,19 +554,18 @@ describe('PATCH /experiments/:id (Issue #7)', () => {
         'X-SC-Key': 'test-key',
       },
       body: JSON.stringify({ name: 'Updated Name' }),
-    });
+    })
 
     // Expecting 401 in test environment without valid SC_API_KEY
     // With valid auth, would expect 404 for non-existent experiment
-    expect([404, 401]).toContain(resp.status);
-  });
+    expect([404, 401]).toContain(resp.status)
+  })
 
   it('should return 400 for no fields to update', async () => {
     // This test requires database setup with an existing experiment
     // Would test that sending empty body returns 400
-
     // TODO: Implement after D1 local testing is set up
-  });
+  })
 
   it('should validate status transitions', async () => {
     // This test requires database setup with an existing experiment
@@ -582,52 +574,49 @@ describe('PATCH /experiments/:id (Issue #7)', () => {
     // 2. Try to transition to 'run' (invalid: must go through preflight, build, launch first)
     // 3. Verify 400 INVALID_STATUS_TRANSITION response
     // 4. Verify error includes current_status, requested_status, allowed_transitions
-
     // TODO: Implement after D1 local testing is set up
-  });
+  })
 
   it('should auto-set launched_at when transitioning to launch', async () => {
     // This test requires database setup
     // Would verify launched_at timestamp is set automatically
-
     // TODO: Implement after D1 local testing is set up
-  });
+  })
 
   it('should auto-set decided_at when transitioning to decide', async () => {
     // This test requires database setup
     // Would verify decided_at timestamp is set automatically
-
     // TODO: Implement after D1 local testing is set up
-  });
-});
+  })
+})
 
 describe('POST /payments/webhook (Issue #8)', () => {
-  let worker: UnstableDevWorker;
+  let worker: UnstableDevWorker
 
   beforeAll(async () => {
     worker = await unstable_dev('src/index.ts', {
       experimental: { disableExperimentalWarning: true },
       local: true,
-    });
-  });
+    })
+  })
 
   afterAll(async () => {
-    await worker.stop();
-  });
+    await worker.stop()
+  })
 
   it('should return 400 for missing stripe-signature header', async () => {
     const resp = await worker.fetch('/payments/webhook', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ type: 'payment_intent.succeeded' }),
-    });
+    })
 
-    expect(resp.status).toBe(400);
-    const data = await resp.json();
-    expect(data.success).toBe(false);
-    expect(data.error.code).toBe('INVALID_REQUEST');
-    expect(data.error.message).toContain('stripe-signature');
-  });
+    expect(resp.status).toBe(400)
+    const data = await resp.json()
+    expect(data.success).toBe(false)
+    expect(data.error.code).toBe('INVALID_REQUEST')
+    expect(data.error.message).toContain('stripe-signature')
+  })
 
   it('should return 400 for invalid stripe-signature format', async () => {
     const resp = await worker.fetch('/payments/webhook', {
@@ -637,13 +626,13 @@ describe('POST /payments/webhook (Issue #8)', () => {
         'stripe-signature': 'invalid',
       },
       body: JSON.stringify({ type: 'payment_intent.succeeded' }),
-    });
+    })
 
-    expect(resp.status).toBe(400);
-    const data = await resp.json();
-    expect(data.success).toBe(false);
-    expect(data.error.code).toBe('INVALID_REQUEST');
-  });
+    expect(resp.status).toBe(400)
+    const data = await resp.json()
+    expect(data.success).toBe(false)
+    expect(data.error.code).toBe('INVALID_REQUEST')
+  })
 
   it('should return 400 for invalid signature', async () => {
     const resp = await worker.fetch('/payments/webhook', {
@@ -653,32 +642,31 @@ describe('POST /payments/webhook (Issue #8)', () => {
         'stripe-signature': 't=1234567890,v1=invalidsignature',
       },
       body: JSON.stringify({ type: 'payment_intent.succeeded' }),
-    });
+    })
 
     // Will return 500 if STRIPE_WEBHOOK_SECRET not configured, or 400 for invalid signature
-    expect([400, 500]).toContain(resp.status);
-  });
+    expect([400, 500]).toContain(resp.status)
+  })
 
   it('should include X-Request-Id header in response', async () => {
     const resp = await worker.fetch('/payments/webhook', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ type: 'payment_intent.succeeded' }),
-    });
+    })
 
-    expect(resp.headers.get('X-Request-Id')).toBeDefined();
-    expect(resp.headers.get('X-Request-Id')).toMatch(/^req_[a-f0-9]{16}$/);
-  });
+    expect(resp.headers.get('X-Request-Id')).toBeDefined()
+    expect(resp.headers.get('X-Request-Id')).toMatch(/^req_[a-f0-9]{16}$/)
+  })
 
   it('should handle webhook with valid signature', async () => {
     // This test requires:
     // 1. STRIPE_WEBHOOK_SECRET environment variable
     // 2. Valid Stripe signature computation
     // 3. Database setup
-
     // TODO: Implement after proper test environment setup
     // For now, we can only test the error cases above
-  });
+  })
 
   it('should handle payment_intent.succeeded event', async () => {
     // This test requires database setup and valid webhook signature
@@ -687,9 +675,8 @@ describe('POST /payments/webhook (Issue #8)', () => {
     // 2. Send payment_intent.succeeded webhook with valid signature
     // 3. Verify payment record created in payments table
     // 4. Verify lead payment_status updated to 'succeeded'
-
     // TODO: Implement after D1 local testing is set up
-  });
+  })
 
   it('should be idempotent for duplicate payment_intent', async () => {
     // This test verifies idempotency
@@ -698,25 +685,22 @@ describe('POST /payments/webhook (Issue #8)', () => {
     // 2. Send same webhook again with same payment_intent_id
     // 3. Verify only one payment record exists
     // 4. Both requests return 200 { received: true }
-
     // TODO: Implement after D1 local testing is set up
-  });
+  })
 
   it('should handle payment_intent.payment_failed event', async () => {
     // This test requires database setup and valid webhook signature
     // Would verify failure event is logged to event_log table
-
     // TODO: Implement after D1 local testing is set up
-  });
+  })
 
   it('should handle charge.refunded event', async () => {
     // This test requires database setup and valid webhook signature
     // Would verify:
     // 1. Payment status updated to 'refunded'
     // 2. Lead payment_status updated to 'refunded'
-
     // TODO: Implement after D1 local testing is set up
-  });
+  })
 
   it('should handle charge.dispute.created event', async () => {
     // This test requires database setup and valid webhook signature
@@ -724,90 +708,88 @@ describe('POST /payments/webhook (Issue #8)', () => {
     // 1. Payment status updated to 'disputed'
     // 2. Alert logged to event_log table
     // 3. console.error called with ALERT message
-
     // TODO: Implement after D1 local testing is set up
-  });
+  })
 
   it('should find lead by email if metadata.lead_id not provided', async () => {
     // This test verifies fallback lead lookup
     // Would test payment_intent.succeeded without metadata.lead_id
     // but with receipt_email matching existing lead
-
     // TODO: Implement after D1 local testing is set up
-  });
-});
+  })
+})
 
 describe('GET /experiments/:id/leads (Issue #9)', () => {
-  let worker: UnstableDevWorker;
+  let worker: UnstableDevWorker
 
   beforeAll(async () => {
     worker = await unstable_dev('src/index.ts', {
       experimental: { disableExperimentalWarning: true },
       local: true,
-    });
-  });
+    })
+  })
 
   afterAll(async () => {
-    await worker.stop();
-  });
+    await worker.stop()
+  })
 
   it('should return 401 without X-SC-Key header', async () => {
-    const resp = await worker.fetch('/experiments/SC-2026-001/leads');
-    expect(resp.status).toBe(401);
+    const resp = await worker.fetch('/experiments/SC-2026-001/leads')
+    expect(resp.status).toBe(401)
 
-    const data = await resp.json();
-    expect(data.success).toBe(false);
-    expect(data.error.code).toBe('UNAUTHORIZED');
-  });
+    const data = await resp.json()
+    expect(data.success).toBe(false)
+    expect(data.error.code).toBe('UNAUTHORIZED')
+  })
 
   it('should return 404 for non-existent experiment when authenticated', async () => {
     const resp = await worker.fetch('/experiments/SC-2026-999/leads', {
       headers: { 'X-SC-Key': 'test-key' },
-    });
+    })
 
     // Expecting 401 in test environment without valid SC_API_KEY
     // With valid auth, would expect 404 for non-existent experiment
-    expect([404, 401]).toContain(resp.status);
-  });
+    expect([404, 401]).toContain(resp.status)
+  })
 
   it('should return 400 for invalid limit parameter', async () => {
     const resp = await worker.fetch('/experiments/SC-2026-001/leads?limit=invalid', {
       headers: { 'X-SC-Key': 'test-key' },
-    });
+    })
 
     // Expecting 401 in test environment without valid SC_API_KEY
     // With valid auth, would expect 400 for invalid limit
-    expect([400, 401]).toContain(resp.status);
-  });
+    expect([400, 401]).toContain(resp.status)
+  })
 
   it('should return 400 for invalid status filter', async () => {
     const resp = await worker.fetch('/experiments/SC-2026-001/leads?status=invalid', {
       headers: { 'X-SC-Key': 'test-key' },
-    });
+    })
 
     // Expecting 401 in test environment without valid SC_API_KEY
     // With valid auth, would expect 400 for invalid status
-    expect([400, 401]).toContain(resp.status);
-  });
+    expect([400, 401]).toContain(resp.status)
+  })
 
   it('should return 400 for invalid cursor format', async () => {
     const resp = await worker.fetch('/experiments/SC-2026-001/leads?cursor=invalid', {
       headers: { 'X-SC-Key': 'test-key' },
-    });
+    })
 
     // Expecting 401 in test environment without valid SC_API_KEY
     // With valid auth, would expect 400 for invalid cursor
-    expect([400, 401]).toContain(resp.status);
-  });
+    expect([400, 401]).toContain(resp.status)
+  })
 
   it('should include X-Request-Id header', async () => {
     const resp = await worker.fetch('/experiments/SC-2026-001/leads', {
       headers: { 'X-SC-Key': 'test-key' },
-    });
+    })
 
-    expect(resp.headers.get('X-Request-Id')).toBeDefined();
-    expect(resp.headers.get('X-Request-Id')).toMatch(/^req_[a-f0-9]{16}$/);
-  });
+    expect(resp.headers.get('X-Request-Id')).toBeDefined()
+    expect(resp.headers.get('X-Request-Id')).toMatch(/^req_[a-f0-9]{16}$/)
+  })
 
   it('should return paginated list with valid status filter', async () => {
     // This test requires database setup with test data
@@ -816,9 +798,8 @@ describe('GET /experiments/:id/leads (Issue #9)', () => {
     // 2. Create test leads with different statuses
     // 3. Query with status filter
     // 4. Verify only leads with matching status are returned
-
     // TODO: Implement after D1 local testing is set up
-  });
+  })
 
   it('should return paginated list with cursor pagination', async () => {
     // This test requires database setup with test data
@@ -828,52 +809,51 @@ describe('GET /experiments/:id/leads (Issue #9)', () => {
     // 3. Query first page, get next_cursor
     // 4. Query second page with cursor
     // 5. Verify pagination works correctly
-
     // TODO: Implement after D1 local testing is set up
-  });
-});
+  })
+})
 
 describe('GET /experiments/:id/decision_memos (Issue #11)', () => {
-  let worker: UnstableDevWorker;
+  let worker: UnstableDevWorker
 
   beforeAll(async () => {
     worker = await unstable_dev('src/index.ts', {
       experimental: { disableExperimentalWarning: true },
       local: true,
-    });
-  });
+    })
+  })
 
   afterAll(async () => {
-    await worker.stop();
-  });
+    await worker.stop()
+  })
 
   it('should return 401 without X-SC-Key header', async () => {
-    const resp = await worker.fetch('/experiments/SC-2026-001/decision_memos');
-    expect(resp.status).toBe(401);
+    const resp = await worker.fetch('/experiments/SC-2026-001/decision_memos')
+    expect(resp.status).toBe(401)
 
-    const data = await resp.json();
-    expect(data.success).toBe(false);
-    expect(data.error.code).toBe('UNAUTHORIZED');
-  });
+    const data = await resp.json()
+    expect(data.success).toBe(false)
+    expect(data.error.code).toBe('UNAUTHORIZED')
+  })
 
   it('should return 404 for non-existent experiment when authenticated', async () => {
     const resp = await worker.fetch('/experiments/SC-2026-999/decision_memos', {
       headers: { 'X-SC-Key': 'test-key' },
-    });
+    })
 
     // Expecting 401 in test environment without valid SC_API_KEY
     // With valid auth, would expect 404 for non-existent experiment
-    expect([404, 401]).toContain(resp.status);
-  });
+    expect([404, 401]).toContain(resp.status)
+  })
 
   it('should include X-Request-Id header', async () => {
     const resp = await worker.fetch('/experiments/SC-2026-001/decision_memos', {
       headers: { 'X-SC-Key': 'test-key' },
-    });
+    })
 
-    expect(resp.headers.get('X-Request-Id')).toBeDefined();
-    expect(resp.headers.get('X-Request-Id')).toMatch(/^req_[a-f0-9]{16}$/);
-  });
+    expect(resp.headers.get('X-Request-Id')).toBeDefined()
+    expect(resp.headers.get('X-Request-Id')).toMatch(/^req_[a-f0-9]{16}$/)
+  })
 
   it('should return list of decision memos ordered by created_at DESC', async () => {
     // This test requires database setup with test data
@@ -882,24 +862,23 @@ describe('GET /experiments/:id/decision_memos (Issue #11)', () => {
     // 2. Create multiple decision memos
     // 3. Query decision memos
     // 4. Verify they are ordered by created_at DESC
-
     // TODO: Implement after D1 local testing is set up
-  });
-});
+  })
+})
 
 describe('POST /experiments/:id/decision_memos (Issue #11)', () => {
-  let worker: UnstableDevWorker;
+  let worker: UnstableDevWorker
 
   beforeAll(async () => {
     worker = await unstable_dev('src/index.ts', {
       experimental: { disableExperimentalWarning: true },
       local: true,
-    });
-  });
+    })
+  })
 
   afterAll(async () => {
-    await worker.stop();
-  });
+    await worker.stop()
+  })
 
   it('should return 401 without X-SC-Key header', async () => {
     const resp = await worker.fetch('/experiments/SC-2026-001/decision_memos', {
@@ -909,13 +888,13 @@ describe('POST /experiments/:id/decision_memos (Issue #11)', () => {
         decision: 'GO',
         rationale: 'Strong market signal',
       }),
-    });
+    })
 
-    expect(resp.status).toBe(401);
-    const data = await resp.json();
-    expect(data.success).toBe(false);
-    expect(data.error.code).toBe('UNAUTHORIZED');
-  });
+    expect(resp.status).toBe(401)
+    const data = await resp.json()
+    expect(data.success).toBe(false)
+    expect(data.error.code).toBe('UNAUTHORIZED')
+  })
 
   it('should return 400 for missing required fields', async () => {
     const resp = await worker.fetch('/experiments/SC-2026-001/decision_memos', {
@@ -925,12 +904,12 @@ describe('POST /experiments/:id/decision_memos (Issue #11)', () => {
         'X-SC-Key': 'test-key',
       },
       body: JSON.stringify({}),
-    });
+    })
 
     // Expecting 401 in test environment without valid SC_API_KEY
     // With valid auth, would expect 400 for missing fields
-    expect([400, 401]).toContain(resp.status);
-  });
+    expect([400, 401]).toContain(resp.status)
+  })
 
   it('should return 400 for invalid decision value', async () => {
     const resp = await worker.fetch('/experiments/SC-2026-001/decision_memos', {
@@ -943,12 +922,12 @@ describe('POST /experiments/:id/decision_memos (Issue #11)', () => {
         decision: 'INVALID_VALUE',
         rationale: 'Test rationale',
       }),
-    });
+    })
 
     // Expecting 401 in test environment without valid SC_API_KEY
     // With valid auth, would expect 400 for invalid decision
-    expect([400, 401]).toContain(resp.status);
-  });
+    expect([400, 401]).toContain(resp.status)
+  })
 
   it('should return 400 for invalid confidence_pct', async () => {
     const resp = await worker.fetch('/experiments/SC-2026-001/decision_memos', {
@@ -962,12 +941,12 @@ describe('POST /experiments/:id/decision_memos (Issue #11)', () => {
         rationale: 'Test rationale',
         confidence_pct: 150,
       }),
-    });
+    })
 
     // Expecting 401 in test environment without valid SC_API_KEY
     // With valid auth, would expect 400 for invalid confidence_pct
-    expect([400, 401]).toContain(resp.status);
-  });
+    expect([400, 401]).toContain(resp.status)
+  })
 
   it('should return 404 for non-existent experiment when authenticated', async () => {
     const resp = await worker.fetch('/experiments/SC-2026-999/decision_memos', {
@@ -980,12 +959,12 @@ describe('POST /experiments/:id/decision_memos (Issue #11)', () => {
         decision: 'GO',
         rationale: 'Test rationale',
       }),
-    });
+    })
 
     // Expecting 401 in test environment without valid SC_API_KEY
     // With valid auth, would expect 404 for non-existent experiment
-    expect([404, 401]).toContain(resp.status);
-  });
+    expect([404, 401]).toContain(resp.status)
+  })
 
   it('should include X-Request-Id header', async () => {
     const resp = await worker.fetch('/experiments/SC-2026-001/decision_memos', {
@@ -998,11 +977,11 @@ describe('POST /experiments/:id/decision_memos (Issue #11)', () => {
         decision: 'GO',
         rationale: 'Test rationale',
       }),
-    });
+    })
 
-    expect(resp.headers.get('X-Request-Id')).toBeDefined();
-    expect(resp.headers.get('X-Request-Id')).toMatch(/^req_[a-f0-9]{16}$/);
-  });
+    expect(resp.headers.get('X-Request-Id')).toBeDefined()
+    expect(resp.headers.get('X-Request-Id')).toMatch(/^req_[a-f0-9]{16}$/)
+  })
 
   it('should create decision memo with all fields', async () => {
     // This test requires database setup with test data
@@ -1010,9 +989,8 @@ describe('POST /experiments/:id/decision_memos (Issue #11)', () => {
     // 1. Create test experiment
     // 2. Create decision memo with all fields
     // 3. Verify 201 response with created memo
-
     // TODO: Implement after D1 local testing is set up
-  });
+  })
 
   it('should allow multiple decision memos for same experiment', async () => {
     // This test requires database setup with test data
@@ -1022,52 +1000,51 @@ describe('POST /experiments/:id/decision_memos (Issue #11)', () => {
     // 2. Create first decision memo (e.g., PIVOT)
     // 3. Create second decision memo (e.g., KILL)
     // 4. Verify both exist
-
     // TODO: Implement after D1 local testing is set up
-  });
-});
+  })
+})
 
 describe('GET /experiments/:id/learning_memos (Issue #12)', () => {
-  let worker: UnstableDevWorker;
+  let worker: UnstableDevWorker
 
   beforeAll(async () => {
     worker = await unstable_dev('src/index.ts', {
       experimental: { disableExperimentalWarning: true },
       local: true,
-    });
-  });
+    })
+  })
 
   afterAll(async () => {
-    await worker.stop();
-  });
+    await worker.stop()
+  })
 
   it('should return 401 without X-SC-Key header', async () => {
-    const resp = await worker.fetch('/experiments/SC-2026-001/learning_memos');
-    expect(resp.status).toBe(401);
+    const resp = await worker.fetch('/experiments/SC-2026-001/learning_memos')
+    expect(resp.status).toBe(401)
 
-    const data = await resp.json();
-    expect(data.success).toBe(false);
-    expect(data.error.code).toBe('UNAUTHORIZED');
-  });
+    const data = await resp.json()
+    expect(data.success).toBe(false)
+    expect(data.error.code).toBe('UNAUTHORIZED')
+  })
 
   it('should return 404 for non-existent experiment when authenticated', async () => {
     const resp = await worker.fetch('/experiments/SC-2026-999/learning_memos', {
       headers: { 'X-SC-Key': 'test-key' },
-    });
+    })
 
     // Expecting 401 in test environment without valid SC_API_KEY
     // With valid auth, would expect 404 for non-existent experiment
-    expect([404, 401]).toContain(resp.status);
-  });
+    expect([404, 401]).toContain(resp.status)
+  })
 
   it('should include X-Request-Id header', async () => {
     const resp = await worker.fetch('/experiments/SC-2026-001/learning_memos', {
       headers: { 'X-SC-Key': 'test-key' },
-    });
+    })
 
-    expect(resp.headers.get('X-Request-Id')).toBeDefined();
-    expect(resp.headers.get('X-Request-Id')).toMatch(/^req_[a-f0-9]{16}$/);
-  });
+    expect(resp.headers.get('X-Request-Id')).toBeDefined()
+    expect(resp.headers.get('X-Request-Id')).toMatch(/^req_[a-f0-9]{16}$/)
+  })
 
   it('should return list of learning memos ordered by week_number ASC', async () => {
     // This test requires database setup with test data
@@ -1076,24 +1053,23 @@ describe('GET /experiments/:id/learning_memos (Issue #12)', () => {
     // 2. Create multiple learning memos
     // 3. Query learning memos
     // 4. Verify they are ordered by week_number ASC
-
     // TODO: Implement after D1 local testing is set up
-  });
-});
+  })
+})
 
 describe('POST /experiments/:id/learning_memos (Issue #12)', () => {
-  let worker: UnstableDevWorker;
+  let worker: UnstableDevWorker
 
   beforeAll(async () => {
     worker = await unstable_dev('src/index.ts', {
       experimental: { disableExperimentalWarning: true },
       local: true,
-    });
-  });
+    })
+  })
 
   afterAll(async () => {
-    await worker.stop();
-  });
+    await worker.stop()
+  })
 
   it('should return 401 without X-SC-Key header', async () => {
     const resp = await worker.fetch('/experiments/SC-2026-001/learning_memos', {
@@ -1105,13 +1081,13 @@ describe('POST /experiments/:id/learning_memos (Issue #12)', () => {
         week_end: '2026-01-12',
         observations: 'Initial observations',
       }),
-    });
+    })
 
-    expect(resp.status).toBe(401);
-    const data = await resp.json();
-    expect(data.success).toBe(false);
-    expect(data.error.code).toBe('UNAUTHORIZED');
-  });
+    expect(resp.status).toBe(401)
+    const data = await resp.json()
+    expect(data.success).toBe(false)
+    expect(data.error.code).toBe('UNAUTHORIZED')
+  })
 
   it('should return 400 for missing required fields', async () => {
     const resp = await worker.fetch('/experiments/SC-2026-001/learning_memos', {
@@ -1121,12 +1097,12 @@ describe('POST /experiments/:id/learning_memos (Issue #12)', () => {
         'X-SC-Key': 'test-key',
       },
       body: JSON.stringify({}),
-    });
+    })
 
     // Expecting 401 in test environment without valid SC_API_KEY
     // With valid auth, would expect 400 for missing fields
-    expect([400, 401]).toContain(resp.status);
-  });
+    expect([400, 401]).toContain(resp.status)
+  })
 
   it('should return 400 for invalid week_number', async () => {
     const resp = await worker.fetch('/experiments/SC-2026-001/learning_memos', {
@@ -1141,12 +1117,12 @@ describe('POST /experiments/:id/learning_memos (Issue #12)', () => {
         week_end: '2026-01-12',
         observations: 'Test observations',
       }),
-    });
+    })
 
     // Expecting 401 in test environment without valid SC_API_KEY
     // With valid auth, would expect 400 for invalid week_number
-    expect([400, 401]).toContain(resp.status);
-  });
+    expect([400, 401]).toContain(resp.status)
+  })
 
   it('should return 400 for invalid date format', async () => {
     const resp = await worker.fetch('/experiments/SC-2026-001/learning_memos', {
@@ -1161,12 +1137,12 @@ describe('POST /experiments/:id/learning_memos (Issue #12)', () => {
         week_end: '2026-01-12',
         observations: 'Test observations',
       }),
-    });
+    })
 
     // Expecting 401 in test environment without valid SC_API_KEY
     // With valid auth, would expect 400 for invalid date format
-    expect([400, 401]).toContain(resp.status);
-  });
+    expect([400, 401]).toContain(resp.status)
+  })
 
   it('should return 404 for non-existent experiment when authenticated', async () => {
     const resp = await worker.fetch('/experiments/SC-2026-999/learning_memos', {
@@ -1181,12 +1157,12 @@ describe('POST /experiments/:id/learning_memos (Issue #12)', () => {
         week_end: '2026-01-12',
         observations: 'Test observations',
       }),
-    });
+    })
 
     // Expecting 401 in test environment without valid SC_API_KEY
     // With valid auth, would expect 404 for non-existent experiment
-    expect([404, 401]).toContain(resp.status);
-  });
+    expect([404, 401]).toContain(resp.status)
+  })
 
   it('should include X-Request-Id header', async () => {
     const resp = await worker.fetch('/experiments/SC-2026-001/learning_memos', {
@@ -1201,11 +1177,11 @@ describe('POST /experiments/:id/learning_memos (Issue #12)', () => {
         week_end: '2026-01-12',
         observations: 'Test observations',
       }),
-    });
+    })
 
-    expect(resp.headers.get('X-Request-Id')).toBeDefined();
-    expect(resp.headers.get('X-Request-Id')).toMatch(/^req_[a-f0-9]{16}$/);
-  });
+    expect(resp.headers.get('X-Request-Id')).toBeDefined()
+    expect(resp.headers.get('X-Request-Id')).toMatch(/^req_[a-f0-9]{16}$/)
+  })
 
   it('should create learning memo with all fields', async () => {
     // This test requires database setup with test data
@@ -1213,9 +1189,8 @@ describe('POST /experiments/:id/learning_memos (Issue #12)', () => {
     // 1. Create test experiment
     // 2. Create learning memo with all fields
     // 3. Verify 201 response with created memo
-
     // TODO: Implement after D1 local testing is set up
-  });
+  })
 
   it('should return 409 for duplicate week_number', async () => {
     // This test requires database setup with test data
@@ -1225,24 +1200,23 @@ describe('POST /experiments/:id/learning_memos (Issue #12)', () => {
     // 2. Create learning memo for week 1
     // 3. Try to create another memo for week 1
     // 4. Verify 409 DUPLICATE_WEEK response
-
     // TODO: Implement after D1 local testing is set up
-  });
-});
+  })
+})
 
 describe('POST /metrics (Issue #10)', () => {
-  let worker: UnstableDevWorker;
+  let worker: UnstableDevWorker
 
   beforeAll(async () => {
     worker = await unstable_dev('src/index.ts', {
       experimental: { disableExperimentalWarning: true },
       local: true,
-    });
-  });
+    })
+  })
 
   afterAll(async () => {
-    await worker.stop();
-  });
+    await worker.stop()
+  })
 
   it('should return 401 without X-SC-Key header', async () => {
     const resp = await worker.fetch('/metrics', {
@@ -1254,13 +1228,13 @@ describe('POST /metrics (Issue #10)', () => {
         impressions: 1000,
         clicks: 50,
       }),
-    });
+    })
 
-    expect(resp.status).toBe(401);
-    const data = await resp.json();
-    expect(data.success).toBe(false);
-    expect(data.error.code).toBe('UNAUTHORIZED');
-  });
+    expect(resp.status).toBe(401)
+    const data = await resp.json()
+    expect(data.success).toBe(false)
+    expect(data.error.code).toBe('UNAUTHORIZED')
+  })
 
   it('should return 400 when missing required fields', async () => {
     const resp = await worker.fetch('/metrics', {
@@ -1270,12 +1244,12 @@ describe('POST /metrics (Issue #10)', () => {
         'X-SC-Key': 'test-key',
       },
       body: JSON.stringify({}),
-    });
+    })
 
     // Expecting 401 in test environment without valid SC_API_KEY
     // With valid auth, would expect 400 for missing fields
-    expect([400, 401]).toContain(resp.status);
-  });
+    expect([400, 401]).toContain(resp.status)
+  })
 
   it('should return 400 for invalid date format', async () => {
     const resp = await worker.fetch('/metrics', {
@@ -1288,12 +1262,12 @@ describe('POST /metrics (Issue #10)', () => {
         experiment_id: 'SC-2026-001',
         date: 'invalid-date',
       }),
-    });
+    })
 
     // Expecting 401 in test environment without valid SC_API_KEY
     // With valid auth, would expect 400 for invalid date
-    expect([400, 401]).toContain(resp.status);
-  });
+    expect([400, 401]).toContain(resp.status)
+  })
 
   it('should return 400 for negative metric values', async () => {
     const resp = await worker.fetch('/metrics', {
@@ -1307,12 +1281,12 @@ describe('POST /metrics (Issue #10)', () => {
         date: '2026-01-15',
         impressions: -100,
       }),
-    });
+    })
 
     // Expecting 401 in test environment without valid SC_API_KEY
     // With valid auth, would expect 400 for negative values
-    expect([400, 401]).toContain(resp.status);
-  });
+    expect([400, 401]).toContain(resp.status)
+  })
 
   it('should include X-Request-Id header', async () => {
     const resp = await worker.fetch('/metrics', {
@@ -1325,11 +1299,11 @@ describe('POST /metrics (Issue #10)', () => {
         experiment_id: 'SC-2026-001',
         date: '2026-01-15',
       }),
-    });
+    })
 
-    expect(resp.headers.get('X-Request-Id')).toBeDefined();
-    expect(resp.headers.get('X-Request-Id')).toMatch(/^req_[a-f0-9]{16}$/);
-  });
+    expect(resp.headers.get('X-Request-Id')).toBeDefined()
+    expect(resp.headers.get('X-Request-Id')).toMatch(/^req_[a-f0-9]{16}$/)
+  })
 
   it('should compute derived metrics correctly', async () => {
     // This test requires database setup with a valid experiment
@@ -1341,9 +1315,8 @@ describe('POST /metrics (Issue #10)', () => {
     //    - cvr_bp = Math.round((10/100) * 10000) = 1000 (10%)
     //    - cpl_cents = Math.round(5000/10) = 500 ($5.00 per lead)
     //    - roas_bp = Math.round((10000/5000) * 10000) = 20000 (200% ROAS)
-
     // TODO: Implement after D1 local testing is set up
-  });
+  })
 
   it('should handle zero values for derived metrics (prevent division by zero)', async () => {
     // This test verifies null handling for division by zero cases
@@ -1351,9 +1324,8 @@ describe('POST /metrics (Issue #10)', () => {
     // 1. Create experiment
     // 2. Import metrics with 0 impressions, 0 sessions, 0 conversions, 0 spend
     // 3. Verify derived metrics are all null (not NaN or Infinity)
-
     // TODO: Implement after D1 local testing is set up
-  });
+  })
 
   it('should upsert metrics (update existing record)', async () => {
     // This test verifies upsert behavior
@@ -1363,9 +1335,8 @@ describe('POST /metrics (Issue #10)', () => {
     // 3. Import different metrics for same date X
     // 4. Verify only one record exists
     // 5. Verify metrics are updated to new values
-
     // TODO: Implement after D1 local testing is set up
-  });
+  })
 
   it('should support source field for platform segmentation', async () => {
     // This test verifies source field handling
@@ -1375,43 +1346,42 @@ describe('POST /metrics (Issue #10)', () => {
     // 3. Import metrics for date X with source='google'
     // 4. Verify two separate records exist
     // 5. Both should be retrievable
-
     // TODO: Implement after D1 local testing is set up
-  });
-});
+  })
+})
 
 describe('GET /metrics (Issue #10)', () => {
-  let worker: UnstableDevWorker;
+  let worker: UnstableDevWorker
 
   beforeAll(async () => {
     worker = await unstable_dev('src/index.ts', {
       experimental: { disableExperimentalWarning: true },
       local: true,
-    });
-  });
+    })
+  })
 
   afterAll(async () => {
-    await worker.stop();
-  });
+    await worker.stop()
+  })
 
   it('should return 401 without X-SC-Key header', async () => {
-    const resp = await worker.fetch('/metrics?experiment_id=SC-2026-001');
+    const resp = await worker.fetch('/metrics?experiment_id=SC-2026-001')
 
-    expect(resp.status).toBe(401);
-    const data = await resp.json();
-    expect(data.success).toBe(false);
-    expect(data.error.code).toBe('UNAUTHORIZED');
-  });
+    expect(resp.status).toBe(401)
+    const data = await resp.json()
+    expect(data.success).toBe(false)
+    expect(data.error.code).toBe('UNAUTHORIZED')
+  })
 
   it('should return 400 when missing experiment_id', async () => {
     const resp = await worker.fetch('/metrics', {
       headers: { 'X-SC-Key': 'test-key' },
-    });
+    })
 
     // Expecting 401 in test environment without valid SC_API_KEY
     // With valid auth, would expect 400 for missing experiment_id
-    expect([400, 401]).toContain(resp.status);
-  });
+    expect([400, 401]).toContain(resp.status)
+  })
 
   it('should return paginated metrics with totals', async () => {
     // This test requires database setup with metrics data
@@ -1420,9 +1390,8 @@ describe('GET /metrics (Issue #10)', () => {
     // 2. Import multiple days of metrics
     // 3. Query GET /metrics?experiment_id=X
     // 4. Verify response has items array, totals object, and count
-
     // TODO: Implement after D1 local testing is set up
-  });
+  })
 
   it('should filter by date range', async () => {
     // This test verifies date range filtering
@@ -1431,9 +1400,8 @@ describe('GET /metrics (Issue #10)', () => {
     // 2. Import metrics for days 1-10
     // 3. Query with start_date=day3, end_date=day7
     // 4. Verify only days 3-7 are returned
-
     // TODO: Implement after D1 local testing is set up
-  });
+  })
 
   it('should filter by source', async () => {
     // This test verifies source filtering
@@ -1442,9 +1410,8 @@ describe('GET /metrics (Issue #10)', () => {
     // 2. Import metrics with different sources
     // 3. Query with source=facebook
     // 4. Verify only facebook metrics are returned
-
     // TODO: Implement after D1 local testing is set up
-  });
+  })
 
   it('should compute correct totals across all records', async () => {
     // This test verifies total aggregation
@@ -1454,7 +1421,6 @@ describe('GET /metrics (Issue #10)', () => {
     // 3. Query all metrics
     // 4. Verify totals sum correctly
     // 5. Verify derived totals are computed from aggregated values
-
     // TODO: Implement after D1 local testing is set up
-  });
-});
+  })
+})
